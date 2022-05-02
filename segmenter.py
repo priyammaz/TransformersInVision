@@ -1,4 +1,3 @@
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -42,7 +41,6 @@ class Segmenter(nn.Module):
         x = x[:, num_extra_tokens:]
 
         masks = self.decoder(x, (H, W))
-
         masks = F.interpolate(masks, size=(H, W), mode="bilinear")
         # masks = unpadding(masks, (H_ori, W_ori))
 

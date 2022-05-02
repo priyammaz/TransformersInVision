@@ -1,9 +1,11 @@
-from importlib.resources import path
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from einops import rearrange
+import torch.nn.functional as F
+from timm.models.vision_transformer import VisionTransformer
+from timm import create_model
 
+#### VISION TRANSFORMER IMPLEMENTATION ####
 class PatchEmbedding(nn.Module):
     """
     This function will split our image into patches
@@ -13,7 +15,7 @@ class PatchEmbedding(nn.Module):
         super().__init__()
         self.image_size = image_size
         self.patch_size = patch_size
-        self.num_patches = (int(image_size/patch_size))**2
+        self.num_patches = (int(image_size / patch_size)) ** 2
 
         self.patching_conv = nn.Conv2d(in_channels=in_channels,
                                        out_channels=embedding,
@@ -28,23 +30,23 @@ class PatchEmbedding(nn.Module):
         x = x.flatten(2)
 
         # Transpose to get n patches x embedding, thus giving each patch a 768 vector embedding
-        x = x.transpose(1,2)
+        x = x.transpose(1, 2)
         return x
 
 class Attention(nn.Module):
     """
     Build the attention mechanism (nearly identical to original Transformer Paper
     """
+
     def __init__(self, embedding, num_heads, qkv_b=True, attention_drop_p=0, projection_drop_p=0):
         super().__init__()
-        self.embedding = embedding # Size of embedding vector
-        self.num_heads = num_heads # Number of heads in multiheaded attention layers
-        self.qkv_b = qkv_b # Do we want a bias term on our QKV linear layer
-        self.attention_drop_p = attention_drop_p # Attention layer dropout probability
-        self.projection_drop_p = projection_drop_p # Projection layer dropout probability
-        self.head_dimension = int(self.embedding/self.num_heads) # Dimension of each head in multiheaded attention
-        self.scaling = self.head_dimension ** 0.5 # Scaling recommended by original transformer paper for exploding grad
-
+        self.embedding = embedding  # Size of embedding vector
+        self.num_heads = num_heads  # Number of heads in multiheaded attention layers
+        self.qkv_b = qkv_b  # Do we want a bias term on our QKV linear layer
+        self.attention_drop_p = attention_drop_p  # Attention layer dropout probability
+        self.projection_drop_p = projection_drop_p  # Projection layer dropout probability
+        self.head_dimension = int(self.embedding / self.num_heads)  # Dimension of each head in multiheaded attention
+        self.scaling = self.head_dimension ** 0.5  # Scaling recommended by original transformer paper for exploding grad
 
         self.qkv = nn.Linear(embedding, embedding * 3)
         self.attention_drop = nn.Dropout(self.attention_drop_p)
@@ -53,24 +55,25 @@ class Attention(nn.Module):
 
     def forward(self, x):
         # Get shape of input layer, samples x patches + patchembedding (1) x embedding
-        samples, patches, embedding = x.shape # (samples, patches+1, embedding)
+        samples, patches, embedding = x.shape  # (samples, patches+1, embedding)
 
         # Expand embedding to 3 x embedding for QKV
-        qkv = self.qkv(x) # (sample, patches+1, 3*embedding)
+        qkv = self.qkv(x)  # (sample, patches+1, 3*embedding)
 
         # Reshape so that for every patch + 1 in every sample we have QKV with dimension number of heads by its dimension
         # Remember that num_heads * head_dimension = embedding
-        qkv = qkv.reshape(samples, patches, 3, self.num_heads, self.head_dimension) # (samples, patches+1, 3, num_heads, head_dim)
+        qkv = qkv.reshape(samples, patches, 3, self.num_heads,
+                          self.head_dimension)  # (samples, patches+1, 3, num_heads, head_dim)
 
         # Permute such that we have QKV so each has all samples, and each head in each sample
         # has dimensions patches + 1 by heads dimension
-        qkv = qkv.permute(2, 0, 3, 1, 4) # (3, samples, heads, patches+1, head_dim)
+        qkv = qkv.permute(2, 0, 3, 1, 4)  # (3, samples, heads, patches+1, head_dim)
 
         # Separate out QKV
         q, k, v = qkv[0], qkv[1], qkv[2]
 
         # Transpose patches and head dimension of K
-        transpose_k = k.transpose(-2, -1) # (samples, heads, head_dim, patches+1)
+        transpose_k = k.transpose(-2, -1)  # (samples, heads, head_dim, patches+1)
 
         # Matrix Multiplication of Q and K scaled
         # (samples, heads, patches+1, head_dim) (samples, heads, head_dim, patches + 1)
@@ -87,7 +90,7 @@ class Attention(nn.Module):
         weighted_average = torch.matmul(attention, v)
 
         # Transpose to (samples, patches+1, heads, head_dim)
-        weighted_average = weighted_average.transpose(1,2)
+        weighted_average = weighted_average.transpose(1, 2)
 
         # Flatten on last layer to get back original shape of (sample, patches + 1, embedding)
         weighted_average = weighted_average.flatten(2)
@@ -100,6 +103,7 @@ class MultiLayerPerceptron(nn.Module):
     """
     Simple Multi Layer Perceptron with GELU activation
     """
+
     def __init__(self, input_features, hidden_features, output_features, dropout_p=0):
         super().__init__()
         self.fc1 = nn.Linear(input_features, hidden_features)
@@ -113,12 +117,12 @@ class MultiLayerPerceptron(nn.Module):
         x = self.drop_2(self.fc2(x))
         return x
 
-
 class TransformerBlock(nn.Module):
     """
     Create Self Attention Block with alyer normalization
     """
-    def __init__(self, embedding, num_heads, hidden_features=2048,qkv_b=True, attention_dropout_p=0,
+
+    def __init__(self, embedding, num_heads, hidden_features=2048, qkv_b=True, attention_dropout_p=0,
                  projection_dropout_p=0, mlp_dropout_p=0):
         super().__init__()
         self.layernorm1 = nn.LayerNorm(embedding, eps=1e-6)
@@ -142,16 +146,19 @@ class VisionTransformer(nn.Module):
     """
     Putting together the Vision Transformer
     """
+
     def __init__(self, image_size=384, patch_size=16, in_channels=3, num_outputs=1000, embeddings=768,
                  num_blocks=12, num_heads=12, hidden_features=2048, qkv_b=True, attention_dropout_p=0,
-                 projection_dropout_p=0, mlp_dropout_p=0, pos_embedding_dropout=0):
+                 projection_dropout_p=0, mlp_dropout_p=0, pos_embedding_dropout=0, return_features=True):
         super().__init__()
+        self.return_features = return_features
         self.patch_embedding = PatchEmbedding(image_size=image_size,
                                               patch_size=patch_size,
                                               in_channels=in_channels,
                                               embedding=embeddings)
-        self.class_token = nn.Parameter(torch.zeros(size=(1,1,embeddings)))
-        self.positional_embedding = nn.Parameter(torch.zeros(size=(1,1+self.patch_embedding.num_patches, embeddings)))
+        self.class_token = nn.Parameter(torch.zeros(size=(1, 1, embeddings)))
+        self.positional_embedding = nn.Parameter(
+            torch.zeros(size=(1, 1 + self.patch_embedding.num_patches, embeddings)))
         self.positional_dropout = nn.Dropout(pos_embedding_dropout)
         self.transformer_block = TransformerBlock(embedding=embeddings,
                                                   num_heads=num_heads,
@@ -167,7 +174,7 @@ class VisionTransformer(nn.Module):
         self.layernorm = nn.LayerNorm(embeddings, eps=1e-6)
         self.out = nn.Linear(embeddings, num_outputs)
 
-    def forward(self, x, return_features=False):
+    def forward(self, x):
         num_samples = x.shape[0]
         x = self.patch_embedding(x)
         class_token = self.class_token.expand(num_samples, -1, -1)
@@ -179,12 +186,155 @@ class VisionTransformer(nn.Module):
             x = transformer_block(x)
 
         x = self.layernorm(x)
-        
-        if return_features:
+
+        if self.return_features:
             # return output tensor as it is
             return x
-        if not return_features:
+        if not self.return_features:
             # return classification output
             output_class_token = x[:, 0]
             x = self.out(output_class_token)
             return x
+
+#### SEGMENTER IMPLEMENTATION ###
+class DecoderLinear(nn.Module):
+    def __init__(self, n_cls, patch_size, d_encoder):
+        super().__init__()
+
+        self.d_encoder = d_encoder
+        self.patch_size = patch_size
+        self.n_cls = n_cls
+
+        self.head = nn.Linear(self.d_encoder, n_cls)
+        # self.apply(init_weights)
+
+    @torch.jit.ignore
+    def no_weight_decay(self):
+        return set()
+
+    def forward(self, x, im_size):
+        H, W = im_size
+        GS = H // self.patch_size
+        x = self.head(x)
+        x = rearrange(x, "b (h w) c -> b c h w", h=GS)
+
+        return x
+
+class MaskTransformer(nn.Module):
+    def __init__(
+        self,
+        n_cls,
+        patch_size,
+        d_encoder,
+        n_layers,
+        n_heads,
+        d_model,
+        d_ff=2048,  # num of hidden features in mlp
+        drop_path_rate=0.0,
+        dropout=0.1,
+    ):
+        super().__init__()
+        self.d_encoder = d_encoder
+        self.patch_size = patch_size
+        self.n_layers = n_layers
+        self.n_cls = n_cls
+        self.d_model = d_model
+        self.d_ff = d_ff
+        self.scale = d_model ** -0.5
+
+        dpr = [x.item() for x in torch.linspace(0, drop_path_rate, n_layers)]
+        self.transformer_block = TransformerBlock(embedding=d_encoder,
+                                            num_heads=n_heads,
+                                            hidden_features=d_ff,
+                                            qkv_b=True,
+                                            attention_dropout_p=0,
+                                            projection_dropout_p=0,
+                                            mlp_dropout_p=0)
+        self.blocks = nn.ModuleList(
+            [self.transformer_block for _ in range(n_layers)]
+        )
+
+        self.cls_emb = nn.Parameter(torch.randn(1, n_cls, d_model))
+        self.proj_dec = nn.Linear(d_encoder, d_model)
+
+        self.proj_patch = nn.Parameter(self.scale * torch.randn(d_model, d_model))
+        self.proj_classes = nn.Parameter(self.scale * torch.randn(d_model, d_model))
+
+        self.decoder_norm = nn.LayerNorm(d_model)
+        self.mask_norm = nn.LayerNorm(n_cls)
+
+        # self.apply(init_weights)
+        # trunc_normal_(self.cls_emb, std=0.02)
+
+    @torch.jit.ignore
+    def no_weight_decay(self):
+        return {"cls_emb"}
+
+    def forward(self, x, im_size):
+        H, W = im_size
+        GS = H // self.patch_size
+
+        x = self.proj_dec(x)
+        cls_emb = self.cls_emb.expand(x.size(0), -1, -1)
+        x = torch.cat((x, cls_emb), 1)
+        for blk in self.blocks:
+            x = blk(x)
+        x = self.decoder_norm(x)
+
+        patches, cls_seg_feat = x[:, : -self.n_cls], x[:, -self.n_cls :]
+        patches = patches @ self.proj_patch
+        cls_seg_feat = cls_seg_feat @ self.proj_classes
+
+        patches = patches / patches.norm(dim=-1, keepdim=True)
+        cls_seg_feat = cls_seg_feat / cls_seg_feat.norm(dim=-1, keepdim=True)
+
+        masks = patches @ cls_seg_feat.transpose(1, 2)
+        masks = self.mask_norm(masks)
+        masks = rearrange(masks, "b (h w) n -> b n h w", h=int(GS))
+
+        return masks
+
+class Segmenter(nn.Module):
+    def __init__(
+        self,
+        decoder,
+        n_cls,
+        patch_size,
+        pretrained_encoder=False
+    ):
+        super().__init__()
+        self.n_cls = n_cls
+        self.patch_size = patch_size
+        if pretrained_encoder:
+            ViT_pretrained = create_model('vit_base_patch16_384', pretrained=True)
+            self.encoder = torch.nn.Sequential(*list(ViT_pretrained.children())[:-1])
+        else:
+            self.encoder = VisionTransformer(return_features=True)
+        self.decoder = decoder
+
+    @torch.jit.ignore
+    def no_weight_decay(self):
+        def append_prefix_no_weight_decay(prefix, module):
+            return set(map(lambda x: prefix + x, module.no_weight_decay()))
+
+        nwd_params = append_prefix_no_weight_decay("encoder.", self.encoder).union(
+            append_prefix_no_weight_decay("decoder.", self.decoder)
+        )
+        return nwd_params
+
+    def forward(self, im):
+        H_ori, W_ori = im.size(2), im.size(3)
+        # im = padding(im, self.patch_size)
+        H, W = im.size(2), im.size(3)
+
+        x = self.encoder(im, return_features=True)
+
+        # remove CLS/DIST tokens for decoding
+        num_extra_tokens = 1# + self.encoder.distilled
+        x = x[:, num_extra_tokens:]
+
+        masks = self.decoder(x, (H, W))
+        masks = F.interpolate(masks, size=(H, W), mode="bilinear")
+        # masks = unpadding(masks, (H_ori, W_ori))
+
+        return masks

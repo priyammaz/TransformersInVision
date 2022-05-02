@@ -1,17 +1,18 @@
 import torch
-import torch.nn as nn
 import torchvision.transforms as transforms
 import torchvision.transforms.functional as TF
 from torch.utils.data import Dataset, DataLoader
 from glob import glob
 from os.path import join
+from PIL import Image
+import numpy as np
 
 PATH_TO_DATA = "data/ADEChallengeData2016"
 
 class ADE20KDataset(Dataset):
     def __init__(self, split="training", data_dir=PATH_TO_DATA, transform=True):
         assert (split in ["training", "validation"])
-        self.dir = os.path.join(data_dir, split)
+        self.dir = join(data_dir, split)
         self.transform = transform
         self.img_path = join(join(PATH_TO_DATA, "images"), split)
         self.labels_path = join(join(PATH_TO_DATA, "annotations"), split)
