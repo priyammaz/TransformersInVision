@@ -3,8 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from vision_transformer import VisionTransformer
-from decoder import DecoderLinear, MaskTransformer
+from decoder import MaskTransformer
 
 class Segmenter(nn.Module):
     def __init__(
@@ -35,7 +34,11 @@ class Segmenter(nn.Module):
         # im = padding(im, self.patch_size)
         H, W = im.size(2), im.size(3)
 
-        x = self.encoder(im, return_features=True)
+        x = self.encoder.patch_embed(im)
+        x = torch.cat((self.encoder.cls_token.expand(x.shape[0], -1, -1), x), dim=1)
+        x = self.encoder.pos_drop(x + self.encoder.pos_embed)
+        x = self.encoder.blocks(x)
+        x = self.encoder.norm(x)
 
         # remove CLS/DIST tokens for decoding
         num_extra_tokens = 1# + self.encoder.distilled
@@ -43,7 +46,7 @@ class Segmenter(nn.Module):
 
         masks = self.decoder(x, (H, W))
 
-        masks = F.interpolate(masks, size=(H, W), mode="bilinear")
+        masks = F.interpolate(masks, size=(H, W), mode="bilinear", align_corners=False)
         # masks = unpadding(masks, (H_ori, W_ori))
 
         return masks
@@ -53,28 +56,27 @@ if __name__ == "__main__":
     C_ = 3
     H_ = 384
     W_ = 384
-    n_cls_ = 9
+    n_cls_ = 150
     d_model_ = 768
     patch_size_ = 16
     num_patches_ = (H_ // patch_size_) * (W_ // patch_size_)
 
     x = torch.rand(size=(B_, C_, H_, W_))
     
-    ### linear layer as decoder 
-    # segmenter = Segmenter(encoder=VisionTransformer(), 
-    #                       decoder=DecoderLinear(n_cls=n_cls_, patch_size=patch_size_, d_encoder=d_model_), 
-    #                       n_cls=n_cls_, patch_size=patch_size_)
+    # !pip install timm
+    from timm import create_model
 
     ### mask transformer as decoder 
-    segmenter = Segmenter(encoder=VisionTransformer(), 
-                          decoder=MaskTransformer(n_cls=n_cls_, 
-                                                  patch_size=patch_size_, 
-                                                  d_encoder=d_model_,
+    timm_vit = create_model("vit_base_patch16_224", pretrained=True)
+    segmenter = Segmenter(encoder=timm_vit, 
+                          decoder=MaskTransformer(n_cls=150, 
+                                                  patch_size=16, 
+                                                  d_encoder=768,
                                                   n_layers=2,
                                                   n_heads=12,
-                                                  d_model=d_model_,
+                                                  d_model=768,
                                                   ), 
-                          n_cls=n_cls_, patch_size=patch_size_)
+                          n_cls=150, patch_size=16)
 
     pred = segmenter(x)
     print(pred.shape)
