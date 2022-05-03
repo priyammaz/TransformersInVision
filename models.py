@@ -323,18 +323,221 @@ class Segmenter(nn.Module):
         return nwd_params
 
     def forward(self, im):
-        H_ori, W_ori = im.size(2), im.size(3)
-        # im = padding(im, self.patch_size)
         H, W = im.size(2), im.size(3)
 
         x = self.encoder(im, return_features=True)
 
         # remove CLS/DIST tokens for decoding
-        num_extra_tokens = 1# + self.encoder.distilled
+        num_extra_tokens = 1
         x = x[:, num_extra_tokens:]
 
         masks = self.decoder(x, (H, W))
         masks = F.interpolate(masks, size=(H, W), mode="bilinear")
-        # masks = unpadding(masks, (H_ori, W_ori))
 
         return masks
+
+class WNet_Encoder(nn.Module):
+
+    def __init__(self):
+        super(WNet_Encoder, self).__init__()
+
+        # separable conv layers
+        # consists of a depthwise convolution and a pointwise convolution
+        def separable_conv(in_channels, out_channels):
+            layers = []
+            layers += [nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=1, padding=1)]  # depthwise
+            layers += [nn.Conv2d(in_channels, out_channels, kernel_size=1)]  # pointwise
+            layers += [nn.BatchNorm2d(out_channels)]
+            layers += [nn.ReLU()]
+            layers += [nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)]  # depthwise
+            layers += [nn.Conv2d(out_channels, out_channels, kernel_size=1)]  # pointwise
+            layers += [nn.BatchNorm2d(out_channels)]
+            layers += [nn.ReLU()]
+            conv_layers = nn.Sequential(*layers)
+            return conv_layers
+
+            # conv layers for module 1, 9, 10, 18
+
+        def conv(in_channels, out_channels):
+            layers = []
+            layers += [nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1)]
+            layers += [nn.BatchNorm2d(out_channels)]
+            layers += [nn.ReLU()]
+            layers += [nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)]
+            layers += [nn.BatchNorm2d(out_channels)]
+            layers += [nn.ReLU()]
+            conv_layers = nn.Sequential(*layers)
+            return conv_layers
+
+            # separable_conv + up sampling
+
+        def up(in_channels, out_channels):
+            up_layers = []
+            up_layers += separable_conv(in_channels, out_channels)
+            up_layers += [nn.ConvTranspose2d(int(in_channels / 2), int(out_channels / 2), kernel_size=2, stride=2)]
+            up_layers = nn.Sequential(*up_layers)
+            return up_layers
+
+            # Max Pooling layer used in the each of contracting step
+
+        self.max = nn.MaxPool2d(2)
+
+        # Contracting Path
+        self.down1 = conv(3, 64)
+        self.down2 = separable_conv(64, 128)
+        self.down3 = separable_conv(128, 256)
+        self.down4 = separable_conv(256, 512)
+
+        # The bottom covolutional layer
+        self.bottom = separable_conv(512, 1024)
+        self.up_sample = nn.ConvTranspose2d(1024, 512, kernel_size=3, stride=2, padding=1, output_padding=1)
+
+        # Expanding Path
+        self.up1 = up(1024, 512)
+        self.up2 = up(512, 256)
+        self.up3 = up(256, 128)
+        self.up4 = conv(128, 64)
+
+        # Last output layer
+        self.last = nn.Conv2d(64, 9, kernel_size=1)
+
+    def forward(self, x):
+        # Contracting Path
+        x1 = self.down1(x)
+        x1_max = self.max(x1)
+        x2 = self.down2(x1_max)
+        x2_max = self.max(x2)
+        x3 = self.down3(x2_max)
+        x3_max = self.max(x3)
+        x4 = self.down4(x3_max)
+        x4_max = self.max(x4)
+
+        # Bottom
+        x5 = self.bottom(x4_max)
+        x5_up = self.up_sample(x5)
+
+        # Expanding Path
+        x6 = self.up1(torch.cat((x4, x5_up), dim=1))  # Skip Connection
+        x7 = self.up2(torch.cat((x3, x6), dim=1))  # Skip Connection
+        x8 = self.up3(torch.cat((x2, x7), dim=1))  # Skip Connection
+        x9 = self.up4(torch.cat((x1, x8), dim=1))  # Skip Connection
+        output = self.last(x9)
+
+        return output
+
+class WNet_Decoder(nn.Module):
+
+    def __init__(self):
+        super(WNet_Decoder, self).__init__()
+
+        # separable conv layers
+        # consists of a depthwise convolution and a pointwise convolution
+        def separable_conv(in_channels, out_channels):
+            layers = []
+            layers += [nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=1, padding=1)]  # depthwise
+            layers += [nn.Conv2d(in_channels, out_channels, kernel_size=1)]  # pointwise
+            layers += [nn.BatchNorm2d(out_channels)]
+            layers += [nn.ReLU()]
+            layers += [nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)]  # depthwise
+            layers += [nn.Conv2d(out_channels, out_channels, kernel_size=1)]  # pointwise
+            layers += [nn.BatchNorm2d(out_channels)]
+            layers += [nn.ReLU()]
+            conv_layers = nn.Sequential(*layers)
+            return conv_layers
+
+            # conv layers for module 1, 9, 10, 18
+
+        def conv(in_channels, out_channels):
+            layers = []
+            layers += [nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1)]
+            layers += [nn.BatchNorm2d(out_channels)]
+            layers += [nn.ReLU()]
+            layers += [nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)]
+            layers += [nn.BatchNorm2d(out_channels)]
+            layers += [nn.ReLU()]
+            conv_layers = nn.Sequential(*layers)
+            return conv_layers
+
+            # conv + up sampling
+
+        def up(in_channels, out_channels):
+            up_layers = []
+            up_layers += separable_conv(in_channels, out_channels)
+            up_layers += [nn.ConvTranspose2d(int(in_channels / 2), int(out_channels / 2), kernel_size=2, stride=2)]
+            up_layers = nn.Sequential(*up_layers)
+            return up_layers
+
+            # SoftMax
+
+        self.softmax = nn.Softmax(dim=1)
+        # Max Pooling layer used in the each of contracting step
+        self.max = nn.MaxPool2d(2)
+
+        # Contracting Path
+        self.down1 = conv(9, 64)
+        self.down2 = separable_conv(64, 128)
+        self.down3 = separable_conv(128, 256)
+        self.down4 = separable_conv(256, 512)
+
+        # The bottom covolutional layer
+        self.bottom = separable_conv(512, 1024)
+        self.up_sample = nn.ConvTranspose2d(1024, 512, kernel_size=2, stride=2)
+
+        # Expanding Path
+        self.up1 = up(1024, 512)
+        self.up2 = up(512, 256)
+        self.up3 = up(256, 128)
+        self.up4 = conv(128, 64)
+
+        # Last output layer
+        self.last = nn.Conv2d(64, 3, kernel_size=1)
+
+    def forward(self, x):
+        # Contracting Path
+        x10 = self.down1(x)
+        x10_max = self.max(x10)
+        x11 = self.down2(x10_max)
+        x11_max = self.max(x11)
+        x12 = self.down3(x11_max)
+        x12_max = self.max(x12)
+        x13 = self.down4(x12_max)
+        x13_max = self.max(x13)
+
+        # Bottom
+        x14 = self.bottom(x13_max)
+        x14_up = self.up_sample(x14)
+
+        # Expanding Path
+        x15 = self.up1(torch.cat((x13, x14_up), dim=1))  # Skip Connection
+        x16 = self.up2(torch.cat((x12, x15), dim=1))  # Skip Connection
+        x17 = self.up3(torch.cat((x11, x16), dim=1))  # Skip Connection
+        x18 = self.up4(torch.cat((x10, x17), dim=1))  # Skip Connection
+
+        output = self.last(x18)
+
+        return output
+
+class WNet(nn.Module):
+
+    def __init__(self):
+        super(WNet, self).__init__()
+        # Encoder
+        self.WNet_Encoder = WNet_Encoder()
+        self.WNet_Decoder = WNet_Decoder()
+        # Decoder
+
+    def forward(self, x, enc_rec):
+
+        enc = self.WNet_Encoder(x)
+
+        if enc_rec == "enc":
+            return enc
+
+        dec = self.WNet_Decoder(F.softmax(enc, 1))
+        if enc_rec == 'dec':
+            return dec
+
+        if enc_rec == 'both':
+            return enc, dec
+
+        return dec
