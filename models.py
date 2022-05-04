@@ -297,19 +297,15 @@ class MaskTransformer(nn.Module):
 class Segmenter(nn.Module):
     def __init__(
         self,
+        encoder,
         decoder,
         n_cls,
         patch_size,
-        pretrained_encoder=False
     ):
         super().__init__()
         self.n_cls = n_cls
         self.patch_size = patch_size
-        if pretrained_encoder:
-            ViT_pretrained = create_model('vit_base_patch16_384', pretrained=True)
-            self.encoder = torch.nn.Sequential(*list(ViT_pretrained.children())[:-1])
-        else:
-            self.encoder = VisionTransformer(return_features=True)
+        self.encoder = encoder
         self.decoder = decoder
 
     @torch.jit.ignore
@@ -323,19 +319,28 @@ class Segmenter(nn.Module):
         return nwd_params
 
     def forward(self, im):
+        H_ori, W_ori = im.size(2), im.size(3)
+        # im = padding(im, self.patch_size)
         H, W = im.size(2), im.size(3)
 
-        x = self.encoder(im, return_features=True)
+        x = self.encoder.patch_embed(im)
+        x = torch.cat((self.encoder.cls_token.expand(x.shape[0], -1, -1), x), dim=1)
+        x = self.encoder.pos_drop(x + self.encoder.pos_embed)
+        x = self.encoder.blocks(x)
+        x = self.encoder.norm(x)
 
         # remove CLS/DIST tokens for decoding
-        num_extra_tokens = 1
+        num_extra_tokens = 1# + self.encoder.distilled
         x = x[:, num_extra_tokens:]
 
         masks = self.decoder(x, (H, W))
-        masks = F.interpolate(masks, size=(H, W), mode="bilinear")
+
+        masks = F.interpolate(masks, size=(H, W), mode="bilinear", align_corners=False)
+        # masks = unpadding(masks, (H_ori, W_ori))
 
         return masks
 
+### WNET IMPLEMENTATION ###
 class WNet_Encoder(nn.Module):
 
     def __init__(self):

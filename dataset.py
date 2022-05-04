@@ -40,12 +40,9 @@ class ADE20KDataset(Dataset):
         img = transforms.ToTensor()(img)
         label = torch.from_numpy(np.array(label)).long()
 
+        if img.shape[0] == 1:
+            img = img.repeat(3,1,1)
         if self.transform:
-            img = self.normalize(img)
-            l, r, h, w = transforms.RandomCrop.get_params(img, output_size=(256, 256))
-            img = TF.crop(img, l, r, h, w)
-            label = TF.crop(label, l, r, h, w)
-
             if torch.rand(1) > 0.5:
                 img = TF.hflip(img)
                 label = TF.hflip(label)
