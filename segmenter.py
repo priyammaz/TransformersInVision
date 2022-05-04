@@ -1,9 +1,9 @@
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 from decoder import MaskTransformer
+from segm_utils import padding, unpadding
 
 class Segmenter(nn.Module):
     def __init__(
@@ -31,7 +31,7 @@ class Segmenter(nn.Module):
 
     def forward(self, im):
         H_ori, W_ori = im.size(2), im.size(3)
-        # im = padding(im, self.patch_size)
+        im = padding(im, self.patch_size)
         H, W = im.size(2), im.size(3)
 
         x = self.encoder.patch_embed(im)
@@ -46,8 +46,8 @@ class Segmenter(nn.Module):
 
         masks = self.decoder(x, (H, W))
 
-        masks = F.interpolate(masks, size=(H, W), mode="bilinear", align_corners=False)
-        # masks = unpadding(masks, (H_ori, W_ori))
+        masks = F.interpolate(masks, size=(H, W), mode="bilinear")
+        masks = unpadding(masks, (H_ori, W_ori))
 
         return masks
 
@@ -64,7 +64,16 @@ if __name__ == "__main__":
     x = torch.rand(size=(B_, C_, H_, W_))
     
     # !pip install timm
+    # !pip install einops
+
+    import torch
+    import torch.nn as nn
+    import torch.nn.functional as F
+
     from timm import create_model
+    
+    from segmenter import Segmenter
+    from decoder import MaskTransformer
 
     ### mask transformer as decoder 
     timm_vit = create_model("vit_base_patch16_224", pretrained=True)
@@ -72,11 +81,12 @@ if __name__ == "__main__":
                           decoder=MaskTransformer(n_cls=150, 
                                                   patch_size=16, 
                                                   d_encoder=768,
-                                                  n_layers=2,
+                                                  n_layers=12,
                                                   n_heads=12,
                                                   d_model=768,
                                                   ), 
                           n_cls=150, patch_size=16)
 
+    x = torch.rand(size=(10, 3, 224, 224))
     pred = segmenter(x)
     print(pred.shape)

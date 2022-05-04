@@ -3,7 +3,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
 
-from vision_transformer import TransformerBlock
+from timm.models.layers import trunc_normal_
+
+from segm_blocks import Block, FeedForward
+from segm_utils import init_weights
+
+# from vision_transformer import TransformerBlock
 
 # linear layer for semantic segmentation
 class DecoderLinear(nn.Module):
@@ -15,7 +20,7 @@ class DecoderLinear(nn.Module):
         self.n_cls = n_cls
 
         self.head = nn.Linear(self.d_encoder, n_cls)
-        # self.apply(init_weights)
+        self.apply(init_weights)
 
     @torch.jit.ignore
     def no_weight_decay(self):
@@ -53,15 +58,8 @@ class MaskTransformer(nn.Module):
         self.scale = d_model ** -0.5
 
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, n_layers)]
-        self.transformer_block = TransformerBlock(embedding=d_encoder,
-                                            num_heads=n_heads,
-                                            hidden_features=d_ff,
-                                            qkv_b=True,
-                                            attention_dropout_p=0,
-                                            projection_dropout_p=0,
-                                            mlp_dropout_p=0)
         self.blocks = nn.ModuleList(
-            [self.transformer_block for _ in range(n_layers)]
+            [Block(d_model, n_heads, d_ff, dropout, dpr[i]) for i in range(n_layers)]
         )
 
         self.cls_emb = nn.Parameter(torch.randn(1, n_cls, d_model))
@@ -73,8 +71,8 @@ class MaskTransformer(nn.Module):
         self.decoder_norm = nn.LayerNorm(d_model)
         self.mask_norm = nn.LayerNorm(n_cls)
 
-        # self.apply(init_weights)
-        # trunc_normal_(self.cls_emb, std=0.02)
+        self.apply(init_weights)
+        trunc_normal_(self.cls_emb, std=0.02)
 
     @torch.jit.ignore
     def no_weight_decay(self):
