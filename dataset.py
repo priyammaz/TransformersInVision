@@ -53,10 +53,11 @@ class ADE20KDataset(Dataset):
                 img = TF.hflip(img)
                 label = TF.hflip(label)
 
-        # Resize Image to 224, 224
-        resize = transforms.Resize((224, 224))
+        # Resize Image to 384, 384
+        resize = transforms.Resize((384, 384))
         img = resize(img)
         label = resize(label.unsqueeze(0)).squeeze()
+        label -= 1
         return img, label
 
 
