@@ -37,11 +37,17 @@ class ADE20KDataset(Dataset):
         label = Image.open(self.labels[idx])
 
         # Convert To Tensor
-        img = transforms.ToTensor()(img)
+        to_tensor = transforms.ToTensor()
+        img = to_tensor(img)
         label = torch.from_numpy(np.array(label)).long()
 
+        # Check if B&W Image
         if img.shape[0] == 1:
             img = img.repeat(3,1,1)
+
+        # Normalize Image
+        img = self.normalize(img)
+
         if self.transform:
             if torch.rand(1) > 0.5:
                 img = TF.hflip(img)
