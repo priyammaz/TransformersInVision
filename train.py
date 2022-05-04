@@ -216,10 +216,13 @@ if __name__ == "__main__":
                           decoder=MaskTransformer(n_cls=150,
                                                   patch_size=16,
                                                   d_encoder=192,
-                                                  n_layers=2,
+                                                  n_layers=12,
                                                   n_heads=12,
                                                   d_model=192),
                           n_cls=150,
                           patch_size=16)
 
-    training_function(segmenter)
+    # training_function(segmenter)
+    x = torch.rand(size=(10, 3, 384, 384))
+    pred = segmenter(x)
+    print(pred.shape)
