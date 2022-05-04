@@ -9,9 +9,12 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 from loss import soft_n_cut_loss
 from timm import create_model
+from timm import optim
+from timm.models.vision_transformer import VisionTransformer
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 
-def training_function(model_architecture, lr=0.0005, batch_size=32, epochs=100,
+def training_function(model_architecture, lr=0.001, batch_size=16, epochs=100,
                       save_model=True, save_loss_plot=True):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -25,12 +28,12 @@ def training_function(model_architecture, lr=0.0005, batch_size=32, epochs=100,
     model = model_architecture
     if torch.cuda.device_count() > 1:
         model = torch.nn.DataParallel(model)
-
     model = model.to(device)
 
-    optimizer = optim.AdamW(model.parameters(), lr=lr)
+    optimizer = optim.create_optimizer_v2(model, opt="sgd", lr=lr, momentum=0.9)
+    scheduler = ReduceLROnPlateau(optimizer, 'min')
 
-    loss_func = nn.CrossEntropyLoss()
+    loss_func = nn.CrossEntropyLoss(ignore_index=-1) # Ignore Misc Class
 
     avg_train_loss = []
     avg_test_loss = []
@@ -80,6 +83,7 @@ def training_function(model_architecture, lr=0.0005, batch_size=32, epochs=100,
 
 
         avg_train, avg_test = np.mean(train_loss), np.mean(test_loss)
+        scheduler.step(avg_test)
 
         if save_model:
             if avg_test < best_test_loss:
@@ -102,7 +106,7 @@ def training_function(model_architecture, lr=0.0005, batch_size=32, epochs=100,
             plt.clf()
 
 def train_wnet(model, optimizer, recon_loss, trainloader, device,
-               loss=soft_n_cut_loss, valloader=None, epochs=15, psi=0.5):
+               valloader=None, epochs=15):
     enc_train_loss_over_epochs = []
     dec_train_loss_over_epochs = []
     enc_val_loss_over_epochs = []
@@ -204,18 +208,18 @@ def train_wnet(model, optimizer, recon_loss, trainloader, device,
     return model
 
 if __name__ == "__main__":
-    timm_vit = create_model("vit_base_patch16_224", pretrained=True)
-    segmenter = Segmenter(encoder=timm_vit,
-                          decoder=MaskTransformer(n_cls=151,
+    ViT = VisionTransformer(img_size=384, embed_dim=192, drop_rate=0.2,
+                            attn_drop_rate=0.2, drop_path_rate=0.2)
+    timm_vit = create_model("vit_tiny_patch16_384", pretrained=True)
+    ViT.load_state_dict(timm_vit.state_dict())
+    segmenter = Segmenter(encoder=ViT,
+                          decoder=MaskTransformer(n_cls=150,
                                                   patch_size=16,
-                                                  d_encoder=768,
+                                                  d_encoder=192,
                                                   n_layers=2,
                                                   n_heads=12,
-                                                  d_model=768),
-                          n_cls=151,
+                                                  d_model=192),
+                          n_cls=150,
                           patch_size=16)
-
-
-    dataset = ADE20KDataset(split="training")
 
     training_function(segmenter)

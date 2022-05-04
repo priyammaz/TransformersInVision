@@ -2,8 +2,10 @@ import torch
 import torch.nn as nn
 from einops import rearrange
 import torch.nn.functional as F
-from timm.models.vision_transformer import VisionTransformer
-from timm import create_model
+from segm_blocks import Block, FeedForward
+from segm_utils import init_weights, padding, unpadding
+from timm.models.layers import trunc_normal_
+
 
 #### VISION TRANSFORMER IMPLEMENTATION ####
 class PatchEmbedding(nn.Module):
@@ -206,7 +208,7 @@ class DecoderLinear(nn.Module):
         self.n_cls = n_cls
 
         self.head = nn.Linear(self.d_encoder, n_cls)
-        # self.apply(init_weights)
+        self.apply(init_weights)
 
     @torch.jit.ignore
     def no_weight_decay(self):
@@ -220,6 +222,7 @@ class DecoderLinear(nn.Module):
 
         return x
 
+# mask trasformer in Segmenter
 class MaskTransformer(nn.Module):
     def __init__(
         self,
@@ -243,15 +246,8 @@ class MaskTransformer(nn.Module):
         self.scale = d_model ** -0.5
 
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, n_layers)]
-        self.transformer_block = TransformerBlock(embedding=d_encoder,
-                                            num_heads=n_heads,
-                                            hidden_features=d_ff,
-                                            qkv_b=True,
-                                            attention_dropout_p=0,
-                                            projection_dropout_p=0,
-                                            mlp_dropout_p=0)
         self.blocks = nn.ModuleList(
-            [self.transformer_block for _ in range(n_layers)]
+            [Block(d_model, n_heads, d_ff, dropout, dpr[i]) for i in range(n_layers)]
         )
 
         self.cls_emb = nn.Parameter(torch.randn(1, n_cls, d_model))
@@ -263,8 +259,8 @@ class MaskTransformer(nn.Module):
         self.decoder_norm = nn.LayerNorm(d_model)
         self.mask_norm = nn.LayerNorm(n_cls)
 
-        # self.apply(init_weights)
-        # trunc_normal_(self.cls_emb, std=0.02)
+        self.apply(init_weights)
+        trunc_normal_(self.cls_emb, std=0.02)
 
     @torch.jit.ignore
     def no_weight_decay(self):
@@ -320,7 +316,7 @@ class Segmenter(nn.Module):
 
     def forward(self, im):
         H_ori, W_ori = im.size(2), im.size(3)
-        # im = padding(im, self.patch_size)
+        im = padding(im, self.patch_size)
         H, W = im.size(2), im.size(3)
 
         x = self.encoder.patch_embed(im)
@@ -335,10 +331,11 @@ class Segmenter(nn.Module):
 
         masks = self.decoder(x, (H, W))
 
-        masks = F.interpolate(masks, size=(H, W), mode="bilinear", align_corners=False)
-        # masks = unpadding(masks, (H_ori, W_ori))
+        masks = F.interpolate(masks, size=(H, W), mode="bilinear")
+        masks = unpadding(masks, (H_ori, W_ori))
 
         return masks
+
 
 ### WNET IMPLEMENTATION ###
 class WNet_Encoder(nn.Module):
