@@ -7,6 +7,7 @@ import os
 from os.path import join
 from PIL import Image
 import numpy as np
+import matplotlib.pyplot as plt
 
 PATH_TO_DATA_ADE20K = "data/ADEChallengeData2016"
 PATH_TO_DATA_MP4 = "data/mp4"
@@ -35,11 +36,12 @@ class ADE20KDataset(Dataset):
         img = Image.open(self.images[idx])
         label = Image.open(self.labels[idx])
 
+        # Convert To Tensor
+        img = transforms.ToTensor()(img)
+        label = torch.from_numpy(np.array(label)).long()
+
         if self.transform:
-            resize = transforms.Resize(size=(512, 512))
-            img = resize(img)
             img = self.normalize(img)
-            label = resize(label)
             l, r, h, w = transforms.RandomCrop.get_params(img, output_size=(256, 256))
             img = TF.crop(img, l, r, h, w)
             label = TF.crop(label, l, r, h, w)
@@ -48,9 +50,10 @@ class ADE20KDataset(Dataset):
                 img = TF.hflip(img)
                 label = TF.hflip(label)
 
-        img = transforms.ToTensor()(img)
-        label = torch.from_numpy(np.array(label)).long()
-
+        # Resize Image to 224, 224
+        resize = transforms.Resize((224, 224))
+        img = resize(img)
+        label = resize(label.unsqueeze(0)).squeeze()
         return img, label
 
 
