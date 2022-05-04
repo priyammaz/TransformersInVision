@@ -222,7 +222,4 @@ if __name__ == "__main__":
                           n_cls=150,
                           patch_size=16)
 
-    # training_function(segmenter)
-    x = torch.rand(size=(10, 3, 384, 384))
-    pred = segmenter(x)
-    print(pred.shape)
+    training_function(segmenter)
