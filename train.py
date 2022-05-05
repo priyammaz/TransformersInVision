@@ -105,14 +105,19 @@ def training_function(model_architecture, lr=0.001, batch_size=16, epochs=100,
             plt.savefig("trainingloss.png")
             plt.clf()
 
-def train_wnet(model, optimizer, recon_loss, trainloader, device,
-               valloader=None, epochs=15):
+def train_wnet( model, optimizer_e, optimizer_d, n_cut_loss, recon_loss, trainloader, device, valloader = None, epochs=15, psi=0.5):
     enc_train_loss_over_epochs = []
     dec_train_loss_over_epochs = []
     enc_val_loss_over_epochs = []
     dec_val_loss_over_epochs = []
     plt.ioff()
     fig = plt.figure()
+
+    avg_train_loss = []
+    avg_test_loss = []
+    best_enc_loss = np.inf
+    best_dec_loss = np.inf
+
     for epoch in tqdm(range(epochs), total=epochs):
         # running loss is the **average** loss for each item in the dataset during this epoch
         enc_running_loss = 0.0
@@ -124,87 +129,93 @@ def train_wnet(model, optimizer, recon_loss, trainloader, device,
             # move data onto the device
             inputs, labels = data
             inputs = inputs.to(device)
-            labels = labels.to(device)
-
+            
             # Optimization
-            optimizer.zero_grad()
-            enc_out = model(inputs, enc_rec='enc')
-            enc_loss =soft_n_cut_loss(enc_out, inputs)
+            optimizer_e.zero_grad()
+            enc_out = model(inputs, returns='enc')
+            loss_layer = n_cut_loss()
+            enc_loss = loss_layer(inputs, F.softmax(enc_out,1)) 
             enc_loss.backward()
-            optimizer.step()
-            dec_out = model(inputs, enc_rec='dec')
+            optimizer_e.step()
+            optimizer_d.zero_grad()
+            # print(enc_loss)
+            dec_out = model(inputs, returns='dec')
             dec_loss = recon_loss(inputs, dec_out)
             dec_loss.backward()
-
-            optimizer.step()
+            optimizer_d.step()        
             enc_running_loss += enc_loss.cpu().data.numpy()
             dec_running_loss += dec_loss.cpu().data.numpy()
 
         # Average Loss for each item in the batch
-        enc_running_loss = enc_running_loss / len(trainloader)
-        dec_running_loss = dec_running_loss / len(trainloader)
-        # -------------------------
+        enc_running_loss = enc_running_loss/len(trainloader)
+        dec_running_loss = dec_running_loss/len(trainloader)
+            # -------------------------
 
         enc_train_loss_over_epochs.append(enc_running_loss)
         dec_train_loss_over_epochs.append(dec_running_loss)
         # Note: it can be more readable to overwrite the previous line - end="\r"
-        print('Epoch: {}, encoding loss: {:.3f}, decoding loss: {:.3f}'.format(epoch + 1, enc_running_loss,
-                                                                               dec_running_loss))
+        print('Epoch: {}, encoding loss: {:.3f}, decoding loss: {:.3f}'.format(epoch + 1, enc_running_loss, dec_running_loss))
 
         # If you pass in a validation dataloader then compute the validation loss
-        if not valloader is None:
-            val_enc_running_loss = 0.0
-            val_dec_running_loss = 0.0
-            with torch.no_grad():
-                for data in valloader:
-                    # Your code
-                    # -------------------------
-                    # move data onto the device
-                    val_inputs, val_labels = data
-                    val_inputs = val_inputs.to(device)
-                    val_labels = val_labels.to(device)
-                    val_enc_out = model(val_inputs, enc_rec='enc')
-                    val_dec_out = model(val_inputs, enc_rec='dec')
-
-                    # clear out all variables
-                    val_enc_loss = soft_n_cut_loss(val_enc_out, val_inputs)
-                    val_dec_loss = recon_loss(val_inputs, val_dec_out)
-                    # val_enc_loss = val_enc_loss.item()
-                    # val_dec_loss = val_dec_loss.item()
-                    val_enc_running_loss += val_enc_loss.cpu().data.numpy()
-                    val_dec_running_loss += val_dec_loss.cpu().data.numpy()
-
-                # Average Loss for each item in the batch
-                val_enc_running_loss = val_enc_running_loss / len(valloader)
-                val_dec_running_loss = val_dec_running_loss / len(valloader)
+        model.eval()
+        loop_test = tqdm(test_dataloader, total=len(test_dataloader), leave=True)
+        with torch.no_grad():
+          val_enc_running_loss = 0.0
+          val_dec_running_loss = 0.0
+          for idx, (img, trgt) in enumerate(loop_test):
+                # Your code
                 # -------------------------
-            enc_val_loss_over_epochs.append(val_enc_running_loss)
-            dec_val_loss_over_epochs.append(val_dec_running_loss)
-            print('Epoch: {}, validation encoding loss: {:.3f}, validation decoding loss: {:.3f}'.format(epoch + 1,
-                                                                                                         val_enc_running_loss,
-                                                                                                         val_dec_running_loss))
+                # move data onto the device
+                val_inputs, val_labels = img.to(device), trgt.to(device)
+                val_enc_out = model(val_inputs, returns='enc')
+                val_dec_out = model(val_inputs, returns='dec')
 
-    plt.subplot(2, 1, 1)
-    plt.ylabel('Encoding Loss')
-    plt.plot(np.arange(epochs), enc_train_loss_over_epochs, color='red', label='train')
-    if not valloader is None:
-        plt.plot(np.arange(epochs), enc_val_loss_over_epochs, color='blue', label='val')
-    plt.title('Loss per Epoch')
-    plt.xticks(np.arange(epochs, dtype=int))
-    plt.grid(True)
-    plt.legend()
+                # clear out all variables
+                val_enc_loss = n_cut_loss()(val_inputs, F.softmax(val_enc_out,1)) 
+                val_dec_loss = recon_loss(val_inputs, val_dec_out)
+                # val_enc_loss = val_enc_loss.item()
+                # val_dec_loss = val_dec_loss.item()
+                val_enc_running_loss += val_enc_loss.cpu().data.numpy()
+                val_dec_running_loss += val_dec_loss.cpu().data.numpy()
+            
+          # Average Loss for each item in the batch
+          val_enc_running_loss = val_enc_running_loss/len(test_dataloader)
+          val_dec_running_loss = val_dec_running_loss/len(test_dataloader)
+                    # -------------------------
+        enc_val_loss_over_epochs.append(val_enc_running_loss)
+        dec_val_loss_over_epochs.append(val_dec_running_loss)
+        print('Epoch: {}, validation encoding loss: {:.3f}, validation decoding loss: {:.3f}'.format(epoch + 1, val_enc_running_loss, val_dec_running_loss))
+      
+        if True:
+          if val_enc_running_loss < best_enc_loss or val_dec_running_loss < best_dec_loss:
+              print("Saving Model")
+              best_enc_loss = val_enc_running_loss
+              best_dec_loss = val_dec_running_loss
+              model_save_name = 'wnet_ade.pt'
+              path = F"/content/gdrive/MyDrive/{model_save_name}" 
+              torch.save(model, path)
+    
+    if True:
+      plt.figure(figsize=(10,5))
+      plt.title("Training and Validation Encoding Loss")
+      plt.plot(enc_val_loss_over_epochs, label="val")
+      plt.plot(enc_train_loss_over_epochs, label="train")
+      plt.xlabel("iterations")
+      plt.ylabel("Encoding Loss")
+      plt.legend()
+      plt.savefig("encloss_wnet.png")
 
-    plt.subplot(2, 1, 2)
-    plt.ylabel('Decoding Loss')
-    plt.plot(np.arange(epochs), dec_train_loss_over_epochs, color='red', label='train')
-    if not valloader is None:
-        plt.plot(np.arange(epochs), dec_val_loss_over_epochs, color='blue', label='val')
-    plt.title('Loss per Epoch')
-    plt.xticks(np.arange(epochs, dtype=int))
-    plt.grid(True)
-    plt.legend()
-
-    plt.show()
+      # print(enc_train_loss_over_epochs)
+      plt.figure(figsize=(10,5))
+      plt.title("Training and Validation Decoding Loss")
+      plt.plot(dec_val_loss_over_epochs, label="val")
+      plt.plot(dec_train_loss_over_epochs, label="train")
+      plt.xlabel("iterations")
+      plt.ylabel("Decoding Loss")
+      plt.legend()
+      plt.savefig("decloss_wnet.png")
+      plt.show()
+      # plt.clf()
     return model
 
 if __name__ == "__main__":
