@@ -137,8 +137,8 @@ def train_wnet( model, optimizer_e, optimizer_d, n_cut_loss, recon_loss, trainlo
             enc_loss = loss_layer(inputs, F.softmax(enc_out,1)) 
             enc_loss.backward()
             optimizer_e.step()
+            
             optimizer_d.zero_grad()
-            # print(enc_loss)
             dec_out = model(inputs, returns='dec')
             dec_loss = recon_loss(inputs, dec_out)
             dec_loss.backward()
@@ -173,8 +173,6 @@ def train_wnet( model, optimizer_e, optimizer_d, n_cut_loss, recon_loss, trainlo
                 # clear out all variables
                 val_enc_loss = n_cut_loss()(val_inputs, F.softmax(val_enc_out,1)) 
                 val_dec_loss = recon_loss(val_inputs, val_dec_out)
-                # val_enc_loss = val_enc_loss.item()
-                # val_dec_loss = val_dec_loss.item()
                 val_enc_running_loss += val_enc_loss.cpu().data.numpy()
                 val_dec_running_loss += val_dec_loss.cpu().data.numpy()
             
