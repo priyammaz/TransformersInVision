@@ -523,23 +523,22 @@ class WNet(nn.Module):
 
     def __init__(self):
         super(WNet, self).__init__()
-        # Encoder
         self.WNet_Encoder = WNet_Encoder()
         self.WNet_Decoder = WNet_Decoder()
-        # Decoder
 
-    def forward(self, x, enc_rec):
+    def forward(self, x, returns='both'):
 
         enc = self.WNet_Encoder(x)
 
-        if enc_rec == "enc":
+        if returns == "enc":
             return enc
 
         dec = self.WNet_Decoder(F.softmax(enc, 1))
-        if enc_rec == 'dec':
+        if returns=='dec':
             return dec
 
-        if enc_rec == 'both':
+        if returns=='both':
             return enc, dec
 
-        return dec
+        else:
+            raise ValueError('Invalid returns, returns must be in [enc dec both]')
