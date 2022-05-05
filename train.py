@@ -89,7 +89,7 @@ def training_function(model_architecture, lr=0.001, batch_size=16, epochs=100,
             if avg_test < best_test_loss:
                 print("Saving Model")
                 best_test_loss = avg_test
-                torch.save(model, "model_store.pt") ### change model name to save as
+                torch.save(model, "outputs/model_store/model_store.pt") ### change model name to save as
 
         avg_train_loss.append(avg_train)
         avg_test_loss.append(avg_test)
