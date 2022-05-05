@@ -222,7 +222,6 @@ class DecoderLinear(nn.Module):
 
         return x
 
-# mask trasformer in Segmenter
 class MaskTransformer(nn.Module):
     def __init__(
         self,
@@ -336,8 +335,11 @@ class Segmenter(nn.Module):
 
         return masks
 
-
 ### WNET IMPLEMENTATION ###
+"""
+WNet architecture adapted from Tao Lin
+https://github.com/taoroalin/WNet/blob/master/train.py
+"""
 class WNet_Encoder(nn.Module):
 
     def __init__(self):

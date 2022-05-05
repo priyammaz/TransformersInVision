@@ -5,6 +5,10 @@ import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 
+"""
+Approximated NCut Loss Adapted From Frank Odom
+https://github.com/fkodom/wnet-unsupervised-image-segmentation/blob/master/src/loss.py
+"""
 ### APPROXIMATED NCUT LOSS ###
 def gaussian_kernel(radius: int = 3, sigma: float = 4, device='cpu'):
     x_2 = np.linspace(-radius, radius, 2*radius+1) ** 2
