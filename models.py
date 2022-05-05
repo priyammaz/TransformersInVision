@@ -2,8 +2,8 @@ import torch
 import torch.nn as nn
 from einops import rearrange
 import torch.nn.functional as F
-from segm_blocks import Block, FeedForward
-from segm_utils import init_weights, padding, unpadding
+from segmenter_parts.segm_blocks import Block
+from segmenter_parts.segm_utils import init_weights, padding, unpadding
 from timm.models.layers import trunc_normal_
 
 

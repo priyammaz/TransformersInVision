@@ -7,7 +7,7 @@ from models import Segmenter, MaskTransformer, WNet
 import torch.optim as optim
 from tqdm import tqdm
 import matplotlib.pyplot as plt
-from loss import soft_n_cut_loss
+from wnet_loss import soft_n_cut_loss
 from timm import create_model
 from timm import optim
 from timm.models.vision_transformer import VisionTransformer

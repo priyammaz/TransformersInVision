@@ -1,8 +1,9 @@
-import torch
+"""
+Adapted From Segmenter Utils Implementation
+https://github.com/rstrudel/segmenter/blob/master/segm/model/utils.py
+"""
 import torch.nn as nn
 import torch.nn.functional as F
-import math
-
 from timm.models.layers import trunc_normal_
 
 def init_weights(m):
