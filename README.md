@@ -23,13 +23,17 @@ The three architecutures that we will explore are:
 
 #### WNet
 
-###### W-Net results on the ADE20K dataset
+###### W-Net results on the MP4 dataset
 
 <img src="./pic/wnet.png" width="600"/>
 
 ###### W-Net results on the reconstruction task
 
 <img src="./pic/wnet_recon.png" width="600"/>
+
+###### W-Net results on the ADE20K dataset
+
+<img src="./pic/wnet_ade.png" width="600"/>
 
 #### Segmenter
 
