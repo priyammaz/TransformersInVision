@@ -10,7 +10,7 @@ The three architecutures that we will explore are:
 - [Segmenter](https://arxiv.org/pdf/2105.05633.pdf) - Supervised Segmentation powered by Transformers
 - [DINO](https://arxiv.org/pdf/2104.14294.pdf) - Unsupervised  Attention Segmentation via Contrastive Learning
 
-# Training Script
+## Training Script
 ```
 # Training for Segmenter Model
 python -m --model=segmenter --batch-size=16 --epochs=30 \
@@ -20,8 +20,22 @@ python -m --model=segmenter --batch-size=16 --epochs=30 \
 python -m --model=wnet --batch-size=16 --epochs=30 \
     --learning-rate=0.001 --pretrained --save-model --save-logs
 ```
+## UNet Segmentation Results
+![Alt text](src/unet.png)
+## W-Net Segmentation Results
+![Alt text](src/wnet.png)
+## Segmenter Results
+### Tiny Vision Transformer: 16 x 16 Patch Size
+![Alt text](src/tiny_segmenter.png)
+### Large Vision Transformer: 8 x 8 Patch Size
+![Alt text](src/Segmentor_20Results.png)
+## DINO Results
+### Weighted Attention Maps from Vision Transformer
+![Alt text](src/attention_map.png)
+### Real Time Attention Tracking
+![Alt text](src/attention_tracking.gif)
 
-# References
+## References
 
 For WNet, Segmenter, and DINO, we accredit the following papers:
 
