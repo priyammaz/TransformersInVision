@@ -403,7 +403,7 @@ class WNet_Encoder(nn.Module):
         self.up4 = conv(128, 64)
 
         # Last output layer
-        self.last = nn.Conv2d(64, 9, kernel_size=1) # Change output channel to number of classes you use
+        self.last = nn.Conv2d(64, 150, kernel_size=1) # Change output channel to number of classes you use
 
     def forward(self, x):
         # Contracting Path
