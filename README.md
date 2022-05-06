@@ -10,20 +10,10 @@ The three architecutures that we will explore are:
 - [Segmenter](https://arxiv.org/pdf/2105.05633.pdf) - Supervised Segmentation powered by Transformers
 - [DINO](https://arxiv.org/pdf/2104.14294.pdf) - Unsupervised  Attention Segmentation via Contrastive Learning
 
-# Training Script
-```
-# Training for Segmenter Model
-python -m --model=segmenter --batch-size=16 --epochs=30 \
-    --learning-rate=0.001 --pretrained --save-model --save-logs
-
-# Training for WNet
-python -m --model=wnet --batch-size=16 --epochs=30 \
-    --learning-rate=0.001 --pretrained --save-model --save-logs
-```
 
 # References
 
-For WNet, Segmenter, and DINO, we accredit the following papers:
+For WNet, Segmenter, and DINO, we accredit the following papers and github repositories:
 
 ```
 @misc{xia2017w,
@@ -50,6 +40,25 @@ For WNet, Segmenter, and DINO, we accredit the following papers:
       archivePrefix={arXiv},
       primaryClass={cs.CV}
 }
+
+@misc{fkodom,
+  author={Frank Odom},
+  title={wnet-unsupervised-image-segmentation},
+  year={2019},
+  publisher={GitHub},
+  journal={GitHub repository},
+  howpublished={\url{https://github.com/fkodom/wnet-unsupervised-image-segmentation}}
+}
+
+@misc{taoroalin,
+  author={Tao Lin},
+  title={WNet},
+  year={2018},
+  publisher={GitHub},
+  journal={GitHub repository},
+  howpublished={\url{https://github.com/taoroalin/WNet}}
+}
+
 ```
 
 We also gratitude the following resource, which provides us pre-trained transformer model used in our Segmenter implementation:
