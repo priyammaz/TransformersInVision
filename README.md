@@ -26,7 +26,7 @@ python -m train --model=wnet --batch-size=16 --epochs=30 \
 #### WNet
 
 ###### W-Net results on the MP4 dataset
-
+Link to the model: https://drive.google.com/file/d/1sM6D0k04HJw3UQoLRsJDSBcgb1AU9Vwl/view?usp=sharing
 <img src="./pic/wnet.png" width="600"/>
 
 ###### W-Net results on the reconstruction task
