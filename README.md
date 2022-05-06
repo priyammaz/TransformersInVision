@@ -11,12 +11,16 @@ The three architecutures that we will explore are:
 - [DINO](https://arxiv.org/pdf/2104.14294.pdf) - Unsupervised  Attention Segmentation via Contrastive Learning
 
 
-## How to run
-#### WNet
+## Training Script
+```
+# Training for Segmenter Model
+python -m --model=segmenter --batch-size=16 --epochs=30 \
+    --learning-rate=0.001 --pretrained --save-model --save-logs
 
-#### Segmenter
-
-#### DINO
+# Training for WNet
+python -m --model=wnet --batch-size=16 --epochs=30 \
+    --learning-rate=0.001 --pretrained --save-model --save-logs
+```
 
 
 ## Visualizations
