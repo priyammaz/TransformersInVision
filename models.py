@@ -478,7 +478,7 @@ class WNet_Decoder(nn.Module):
         self.max = nn.MaxPool2d(2)
 
         # Contracting Path
-        self.down1 = conv(9, 64)
+        self.down1 = conv(150, 64)
         self.down2 = separable_conv(64, 128)
         self.down3 = separable_conv(128, 256)
         self.down4 = separable_conv(256, 512)
