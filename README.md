@@ -17,7 +17,6 @@ python -m train --model=segmenter --batch-size=16 --epochs=30 \
     --learning-rate=0.001 --pretrained --save-model --save-logs
 
 # Training for WNet
-# Before train, change output channel size of the encoder model to number of classes you use
 python -m train --model=wnet --batch-size=16 --epochs=30 \
     --learning-rate=0.001 --pretrained --save-model --save-logs
 ```
