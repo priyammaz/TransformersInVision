@@ -13,11 +13,11 @@ The three architecutures that we will explore are:
 ## Training Script
 ```
 # Training for Segmenter Model
-python -m --model=segmenter --batch-size=16 --epochs=30 \
+python -m train --model=segmenter --batch-size=16 --epochs=30 \
     --learning-rate=0.001 --pretrained --save-model --save-logs
 
 # Training for WNet
-python -m --model=wnet --batch-size=16 --epochs=30 \
+python -m train --model=wnet --batch-size=16 --epochs=30 \
     --learning-rate=0.001 --pretrained --save-model --save-logs
 ```
 
